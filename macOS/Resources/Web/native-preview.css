@@ -24,6 +24,9 @@ th { background: #f3f5f8; }
 li > .task-list { padding-left: 22px; }
 img { max-width: 100%; }
 .blocked-media { color: #8b5a00; font-style: italic; }
+/* MathJax glyphs are drawn with `currentColor`, so typeset math needs no colour rule of its own.
+   A long display formula scrolls inside its own block instead of stretching the page. */
+.math-display { display: block; margin: 1.4em 0; overflow-x: auto; overflow-y: hidden; text-align: center; }
 /* "You are here": the block the editor caret sits in. Drawn in the gutter so nothing reflows. */
 .source-active { position: relative; }
 .source-active::before {

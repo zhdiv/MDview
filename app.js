@@ -3,6 +3,7 @@
 
   const STORAGE_KEY = "mdviewer.document.v1";
   const THEME_KEY = "mdviewer.theme";
+  const MATHJAX_STARTUP = "vendor/mathjax/startup.js";
   const DEFAULT_DOCUMENT = `# Offline Markdown Viewer
 
 Open or drop a local **Markdown** file, then edit it with an instant preview.
@@ -14,8 +15,13 @@ Open or drop a local **Markdown** file, then edit it with an instant preview.
 - [x] Live split preview
 - [x] Open, edit, save, export, and print
 - [x] Tables, task lists, code blocks, links, and local images
+- [x] LaTeX math, inline like $e^{i\\pi} + 1 = 0$ and in blocks
 - [x] Light and dark themes
 - [ ] Write something excellent
+
+$$
+\\int_{-\\infty}^{\\infty} e^{-x^2}\\,dx = \\sqrt{\\pi}
+$$
 
 | Shortcut | Action |
 | :--- | :--- |
@@ -115,6 +121,12 @@ console.log("No CDN required.", offline);
     updateDirtyState();
     updateCursorPosition();
     if (!elements.searchBar.hidden) updateSearchMatches(false);
+    // Typesetting is asynchronous only the first time, when MathJax itself is fetched from the
+    // bundled copy. Rethrowing keeps a broken install loud instead of leaving bare TeX on screen.
+    MDViewerMath.typesetDocument(elements.preview, MATHJAX_STARTUP).catch((error) => {
+      setStatus("Math typesetting failed");
+      throw error;
+    });
   }
 
   function updateCursorPosition() {
@@ -225,22 +237,35 @@ console.log("No CDN required.", offline);
     setStatus(`Downloaded ${normalizedFileName()}`);
   }
 
+  /// Export and print both hand out whatever is in the preview right now, and typesetting is
+  /// asynchronous the first time a document contains math, while MathJax loads. A formula that has
+  /// not been typeset yet would leave the file with raw TeX in it, so refuse instead.
+  function assertMathTypeset(what) {
+    if (!elements.preview.querySelector(".math:not(.math-typeset)")) return;
+    setStatus("Math is still typesetting — try again in a moment");
+    throw new Error(`${what} was requested before math finished typesetting`);
+  }
+
   function exportedHtml() {
     const title = MDViewerMarkdown.escapeHtml(normalizedFileName().replace(/\.md$/i, ""));
+    assertMathTypeset("Export");
+    // Math is exported as the SVG already in the preview, so the file needs MathJax's stylesheet but
+    // not MathJax. It stays as offline and self-contained as every other exported document.
+    const mathStyles = elements.preview.querySelector(".math-typeset") ? MDViewerMath.stylesheetText() : "";
     return `<!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>${title}</title>
-<style>${document.querySelector("style[data-export]")?.textContent || exportStyles()}</style>
+<style>${exportStyles()}${mathStyles}</style>
 </head>
 <body><main class="markdown-body">${elements.preview.innerHTML}</main></body>
 </html>`;
   }
 
   function exportStyles() {
-    return `:root{color-scheme:light dark}body{margin:0;background:#f6f7f9;color:#20242c;font:16px/1.65 system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}.markdown-body{box-sizing:border-box;max-width:900px;margin:0 auto;min-height:100vh;padding:48px 56px;background:#fff}h1,h2,h3,h4{line-height:1.25;margin:1.6em 0 .6em}h1{font-size:2.2em;border-bottom:1px solid #dfe2e7;padding-bottom:.3em}h2{font-size:1.65em;border-bottom:1px solid #e7e9ed;padding-bottom:.25em}p,ul,ol{margin:0 0 1.3em}li{margin:.3em 0}a{color:#3568d4}code{background:#eef1f5;border-radius:4px;padding:.15em .35em;font-family:ui-monospace,SFMono-Regular,Consolas,monospace}pre{overflow:auto;background:#171a21;color:#e9edf4;border-radius:8px;padding:18px;white-space:pre;tab-size:2;overflow-wrap:normal;word-break:normal}pre code{background:none;padding:0;line-height:1.5;overflow-wrap:normal;word-break:normal}blockquote{margin:0 0 1.3em;padding:.1em 1em;border-left:4px solid #6b83f2;color:#5e6673;background:#f7f8ff}table{border-collapse:collapse;width:100%;margin:0}th,td{border:1px solid #d9dde5;padding:8px 12px}th{background:#f3f5f8}.table-wrap{overflow:auto;margin-bottom:1.3em}.task-list{list-style:none;padding-left:0}img{max-width:100%}.blocked-media{color:#8b5a00;font-style:italic}@media(prefers-color-scheme:dark){body{background:#111319;color:#dce1ea}.markdown-body{background:#191c23}h1,h2{border-color:#373c47}a{color:#8aa8ff}code,th{background:#292e39}blockquote{background:#202536;color:#bcc5d6}th,td{border-color:#3d4350}}@media print{body,.markdown-body{background:#fff;color:#111}.markdown-body{padding:0;max-width:none}a{color:inherit}}`;
+    return `:root{color-scheme:light dark}body{margin:0;background:#f6f7f9;color:#20242c;font:16px/1.65 system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}.markdown-body{box-sizing:border-box;max-width:900px;margin:0 auto;min-height:100vh;padding:48px 56px;background:#fff}h1,h2,h3,h4{line-height:1.25;margin:1.6em 0 .6em}h1{font-size:2.2em;border-bottom:1px solid #dfe2e7;padding-bottom:.3em}h2{font-size:1.65em;border-bottom:1px solid #e7e9ed;padding-bottom:.25em}p,ul,ol{margin:0 0 1.3em}li{margin:.3em 0}a{color:#3568d4}code{background:#eef1f5;border-radius:4px;padding:.15em .35em;font-family:ui-monospace,SFMono-Regular,Consolas,monospace}pre{overflow:auto;background:#171a21;color:#e9edf4;border-radius:8px;padding:18px;white-space:pre;tab-size:2;overflow-wrap:normal;word-break:normal}pre code{background:none;padding:0;line-height:1.5;overflow-wrap:normal;word-break:normal}blockquote{margin:0 0 1.3em;padding:.1em 1em;border-left:4px solid #6b83f2;color:#5e6673;background:#f7f8ff}table{border-collapse:collapse;width:100%;margin:0}th,td{border:1px solid #d9dde5;padding:8px 12px}th{background:#f3f5f8}.table-wrap{overflow:auto;margin-bottom:1.3em}.task-list{list-style:none;padding-left:0}img{max-width:100%}.blocked-media{color:#8b5a00;font-style:italic}.math-display{display:block;margin:1.4em 0;overflow-x:auto;overflow-y:hidden;text-align:center}@media(prefers-color-scheme:dark){body{background:#111319;color:#dce1ea}.markdown-body{background:#191c23}h1,h2{border-color:#373c47}a{color:#8aa8ff}code,th{background:#292e39}blockquote{background:#202536;color:#bcc5d6}th,td{border-color:#3d4350}}@media print{body,.markdown-body{background:#fff;color:#111}.markdown-body{padding:0;max-width:none}a{color:inherit}.math-display{overflow-x:visible}}`;
   }
 
   function exportHtml() {
@@ -441,7 +466,10 @@ function handleShortcut(event) {
   document.getElementById("openButton").addEventListener("click", openFile);
   document.getElementById("saveButton").addEventListener("click", saveMarkdown);
   document.getElementById("exportButton").addEventListener("click", exportHtml);
-  document.getElementById("printButton").addEventListener("click", () => window.print());
+  document.getElementById("printButton").addEventListener("click", () => {
+    assertMathTypeset("Print");
+    window.print();
+  });
   document.getElementById("themeButton").addEventListener("click", toggleTheme);
   document.getElementById("searchButton").addEventListener("click", () => toggleSearch());
   document.getElementById("searchClose").addEventListener("click", () => toggleSearch(false));

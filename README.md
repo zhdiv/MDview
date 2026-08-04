@@ -100,7 +100,7 @@ Open `index.html` in a modern browser, or drag the file into a browser window. I
 - opening or dropping `.md`, `.markdown`, and plain-text files;
 - live Edit, Split, and Preview layouts;
 - save-in-place where the browser supports the File System Access API, with a download fallback;
-- standalone HTML export and print/PDF output;
+- standalone HTML export and print/PDF output, with any math baked in as SVG;
 - find, synchronized scrolling, formatting shortcuts, dark mode, and local draft recovery.
 
 | Shortcut | Action |
@@ -125,6 +125,27 @@ for a real `<br>`.
 
 Raw HTML in the source is escaped rather than rendered.
 
+### LaTeX math
+
+TeX is typeset with MathJax, in the app, in Quick Look and in the browser page.
+
+| Written as | Renders as |
+| --- | --- |
+| `$e^{i\pi} + 1 = 0$` or `\(…\)` | inline math, inside the line |
+| `$$…$$` or `\[…\]` opening a line | display math, centred in its own block |
+
+Everything between the delimiters goes to MathJax untouched, so `$a_1 * b_2$` is one formula rather
+than emphasis, and every TeX package ships preloaded — `\begin{aligned}`, `\mathbb`, `\ce`, and the
+rest work without an on-demand download. MathJax rejects malformed TeX in place, in red, leaving the
+rest of the document alone.
+
+A single `$` is left as a dollar sign: `$5 and $10` is prose, because a formula may not open with a
+space or close right before a digit. Write `\$` for a literal dollar that would otherwise pair up,
+and `` `$x$` `` in backticks for TeX shown as source. Math inside a code span or fence is never
+typeset.
+
+Math is typeset to SVG, so exported HTML files and Quick Look previews carry the real formulas.
+
 ## Offline guarantee
 
 Every byte of JavaScript and CSS is in this repository. There is no analytics, service worker, remote
@@ -137,6 +158,8 @@ default browser, only when you explicitly click it. Draft recovery uses only loc
 
 ```
 markdown.js              the renderer, shared by every target
+math.js                  MathJax loading and typesetting, shared by every target
+vendor/mathjax/          the MathJax components themselves (see its README)
 index.html app.js        browser version
 styles.css               browser version styles
 assets/                  app icon (SVG source + 1024px raster)

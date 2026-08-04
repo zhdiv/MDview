@@ -36,10 +36,9 @@ final class PreviewViewController: QLPreviewProvider, QLPreviewingController {
 
         let markdown = try String(contentsOf: url, encoding: .utf8)
         let bundle = Bundle(for: PreviewViewController.self)
-        let script = try resource(named: "markdown", extension: "js", bundle: bundle)
         let baseCSS = try resource(named: "native-preview", extension: "css", bundle: bundle)
         let themeCSS = try resource(named: "native-theme-overrides", extension: "css", bundle: bundle)
-        let rendered = try render(markdown: markdown, script: script)
+        let rendered = try render(markdown: markdown, bundle: bundle)
         let theme = resolvedTheme(themePreference)
 
         let html = """
@@ -50,16 +49,19 @@ final class PreviewViewController: QLPreviewProvider, QLPreviewingController {
           <meta name="viewport" content="width=device-width, initial-scale=1">
           <meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data:; style-src 'unsafe-inline'">
           <meta name="color-scheme" content="light dark">
-          <style>\(baseCSS)\n\(themeCSS)</style>
+          <style>\(baseCSS)\n\(themeCSS)\n\(rendered.mathCSS)</style>
         </head>
-        <body><main class="markdown-body">\(rendered)</main></body>
+        <body><main class="markdown-body">\(rendered.html)</main></body>
         </html>
         """
         guard let data = html.data(using: .utf8) else { throw PreviewError.invalidHTML }
         return data
     }
 
-    private static func render(markdown: String, script: String) throws -> String {
+    /// Renders the Markdown and, when the document contains math, typesets it in the same context.
+    /// Finder displays this reply as static data and never runs its scripts, so a formula that is not
+    /// already SVG here is a formula the reader never sees.
+    private static func render(markdown: String, bundle: Bundle) throws -> (html: String, mathCSS: String) {
         guard let context = JSContext() else {
             throw PreviewError.rendererFailed("JavaScriptCore context creation failed")
         }
@@ -67,8 +69,23 @@ final class PreviewViewController: QLPreviewProvider, QLPreviewingController {
         context.exceptionHandler = { _, exception in
             exceptionMessage = exception?.toString() ?? "Unknown renderer exception"
         }
-        context.evaluateScript(script)
-        if let exceptionMessage { throw PreviewError.rendererFailed(exceptionMessage) }
+        func evaluate(_ source: String, _ label: String) throws {
+            exceptionMessage = nil
+            context.evaluateScript(source)
+            if let exceptionMessage { throw PreviewError.rendererFailed("\(label): \(exceptionMessage)") }
+        }
+        func value(of expression: String, _ label: String) throws -> JSValue {
+            exceptionMessage = nil
+            let result = context.evaluateScript(expression)
+            if let exceptionMessage { throw PreviewError.rendererFailed("\(label): \(exceptionMessage)") }
+            guard let result else { throw PreviewError.rendererFailed("\(label) produced no value") }
+            return result
+        }
+
+        try evaluate(resource(named: "markdown", extension: "js", bundle: bundle), "markdown.js")
+        try evaluate(resource(named: "math", extension: "js", bundle: bundle), "math.js")
+
+        exceptionMessage = nil
         guard let renderer = context
             .objectForKeyedSubscript("MDViewerMarkdown")?
             .objectForKeyedSubscript("renderMarkdown"),
@@ -76,7 +93,65 @@ final class PreviewViewController: QLPreviewProvider, QLPreviewingController {
             throw PreviewError.rendererFailed("Markdown renderer was not exported")
         }
         if let exceptionMessage { throw PreviewError.rendererFailed(exceptionMessage) }
-        return rendered
+        guard rendered.contains("class=\"math math-") else { return (rendered, "") }
+
+        try loadMathJax(into: context, bundle: bundle, evaluate: evaluate)
+        // A component bundle that half-loads would otherwise surface as an unrelated failure inside
+        // the typesetter, so confirm the entry point exists before reaching for it.
+        guard try value(of: "typeof MathJax.tex2svg === 'function'", "MathJax startup").toBool() else {
+            throw PreviewError.rendererFailed("MathJax did not finish loading")
+        }
+
+        exceptionMessage = nil
+        guard let typesetter = context
+            .objectForKeyedSubscript("MDViewerMath")?
+            .objectForKeyedSubscript("typesetHTML"),
+              let typeset = typesetter.call(withArguments: [rendered])?.toString() else {
+            throw PreviewError.rendererFailed("Math typesetter was not exported")
+        }
+        if let exceptionMessage { throw PreviewError.rendererFailed(exceptionMessage) }
+        guard let css = try value(of: "MDViewerMath.stylesheetText()", "MathJax stylesheet").toString() else {
+            throw PreviewError.rendererFailed("MathJax produced no stylesheet")
+        }
+        return (typeset, css)
+    }
+
+    /// Boots MathJax inside a bare `JSContext`. There is no DOM and no `require`, so the component
+    /// loader is handed a native one and the DOM-free `liteDOM` adaptor. See `vendor/mathjax/README.md`
+    /// for why the prebuilt `tex-svg.js` bundle cannot be used here.
+    private static func loadMathJax(into context: JSContext, bundle: Bundle,
+                                    evaluate: (String, String) throws -> Void) throws {
+        guard let directory = bundle.resourceURL?.appendingPathComponent("Web/mathjax"),
+              FileManager.default.fileExists(atPath: directory.appendingPathComponent("startup.js").path) else {
+            throw PreviewError.missingResource("Web/mathjax")
+        }
+
+        // Non-nil by construction: the block only runs while JavaScript is calling into it.
+        let loadComponent: @convention(block) (String) -> Void = { path in
+            let current = JSContext.current()!
+            let url = URL(fileURLWithPath: path)
+            do {
+                current.evaluateScript(try String(contentsOf: url, encoding: .utf8), withSourceURL: url)
+            } catch {
+                current.exception = JSValue(newErrorFromMessage: "MathJax component \(path) is unreadable: \(error)",
+                                            in: current)
+            }
+        }
+        context.setObject(loadComponent, forKeyedSubscript: "mdviewerLoadMathJaxComponent" as NSString)
+        context.setObject(directory.path, forKeyedSubscript: "mdviewerMathJaxDirectory" as NSString)
+
+        try evaluate("""
+        globalThis.MathJax = MDViewerMath.mathJaxConfig({
+          paths: { mathjax: mdviewerMathJaxDirectory },
+          require: (file) => mdviewerLoadMathJaxComponent(file),
+          load: ["adaptors/liteDOM", "input/tex-full", "output/svg"]
+        });
+        """, "MathJax configuration")
+        // Every component is loaded synchronously through the native loader, and JavaScriptCore
+        // drains its microtask queue as each API call returns, so MathJax has started up by the time
+        // this returns rather than at some later turn of a run loop that a Quick Look reply never has.
+        try evaluate(String(contentsOf: directory.appendingPathComponent("startup.js"), encoding: .utf8),
+                     "MathJax startup.js")
     }
 
     private static func resource(named name: String, extension fileExtension: String,

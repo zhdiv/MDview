@@ -101,8 +101,8 @@ that has to agree with it.
 
 ## Gotcha: the Markdown renderer is shared by three targets
 
-`markdown.js` is loaded by the app's `MarkdownPreviewView`/`WKWebView`, by Quick Look through
-`JavaScriptCore`, and by the browser page. Quick Look returns the rendered markup plus the same native
+`markdown.js` (and `math.js` with it) is loaded by the app's `MarkdownPreviewView`/`WKWebView`, by
+Quick Look through `JavaScriptCore`, and by the browser page. Quick Look returns the rendered markup plus the same native
 CSS as a static HTML data reply for Finder to display. A change affects all three, and only the
 browser one has fast feedback — run `./macOS/test.sh` too.
 
@@ -123,6 +123,55 @@ fixture in `tests/fixtures/` is full of them.
 
 A single newline inside a paragraph collapses to a space so hard-wrapped documents reflow with the
 window. Only two trailing spaces or a trailing backslash produce `<br>`. Tests assert both.
+
+---
+
+## Gotcha: MathJax has to run in three places, one of which has no DOM
+
+`markdown.js` never typesets. It only *extracts* TeX — before escaping, before the emphasis rules, so
+`$a_1 * b_2$` cannot become italics — and emits `<span class="math math-inline" data-tex="…">`, with
+the TeX kept both in the attribute and as the element's text. `math.js` turns those into SVG, in two
+flavours, because the three targets do not share an environment:
+
+| Target | Call | Notes |
+| --- | --- | --- |
+| browser page, app `WKWebView` | `typesetDocument(root, url)` | loads MathJax on first use, walks the DOM |
+| Quick Look extension | `typesetHTML(html)` | no DOM: rewrites the markup string, MathJax booted from Swift |
+
+**Quick Look must pre-render.** Finder displays a `QLPreviewReply` as static data and does not run its
+scripts, so a formula that is not already SVG in that reply is a formula the reader never sees. The
+extension boots MathJax inside its `JSContext` and typesets before handing the data over.
+
+**The prebuilt bundles cannot be used.** `es5/tex-svg.js` includes `ui/menu`, which pulls in the
+speech-rule engine; SRE initialises *at load* and needs `window.document` or a Node `require`.
+JavaScriptCore has neither, and the bundle throws before it sees any TeX. `vendor/mathjax/` therefore
+holds the individual SRE-free components, loaded through a native `require` shim
+(`loadMathJax(into:bundle:evaluate:)`) plus the `liteDOM` adaptor. Its README has the details and the
+update procedure — both suites fail loudly if a future version reintroduces the DOM dependency.
+
+Everything is loaded synchronously through that shim, and JavaScriptCore drains its microtask queue
+as each API call returns, so MathJax has started up by the time `evaluateScript` returns. That
+matters: a Quick Look reply has no run loop to come back to later.
+
+### The preview render is asynchronous
+
+`window.renderMarkdown` returns a promise and `MarkdownPreviewView.paint` **awaits** it. Typesetting
+changes block heights, so scrolling before it settles — restoring the reader's offset, or jumping to
+the caret's line — lands somewhere else. If you add work to the render path, keep it inside that
+promise. In the browser page the same window is why `assertMathTypeset` refuses an export or a print
+that would otherwise write raw TeX into the file.
+
+### CSP needs `style-src 'unsafe-inline'`
+
+MathJax's SVG output puts `vertical-align` in a `style` attribute and ships its stylesheet as an
+injected `<style>` element. Both need `style-src 'unsafe-inline'`; without it formulas sit on the
+wrong baseline. `connect-src 'none'` is untouched, and scripts are still same-origin only.
+
+### `$` is usually money
+
+A formula may not open with a space after `$`, close on a space, or be followed by a digit, which
+leaves `$5 and $10` as prose. `\$` is an escape for a literal dollar. Both are covered by tests —
+they are the cases a naive delimiter regex silently eats.
 
 ---
 

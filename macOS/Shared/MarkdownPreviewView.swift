@@ -81,10 +81,13 @@ final class MarkdownPreviewView: NSView, WKNavigationDelegate {
         // Set the theme before painting content so there is no flash; content only appears once
         // renderMarkdown runs. A focus line re-anchors the view on the block being edited, which
         // matters after a re-render because the old scroll offset may point somewhere else entirely.
+        // Awaiting the render matters once a document contains math: typesetting is asynchronous the
+        // first time (MathJax is loaded on demand) and it changes block heights, so scrolling before
+        // it settles lands somewhere else.
         let body = """
         document.documentElement.dataset.theme = theme;
         const offset = keepScroll ? window.scrollY : 0;
-        window.renderMarkdown(markdown);
+        await window.renderMarkdown(markdown);
         window.scrollTo(0, offset);
         if (focusLine >= 0) window.scrollToSourceLine(focusLine);
         return true;

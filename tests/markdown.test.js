@@ -132,6 +132,59 @@ First paragraph.
   assert.match(html, /<blockquote data-src-line="7"><p data-src-line="7"/);
 });
 
+test("keeps LaTeX out of the inline rules and hands it to the typesetter", () => {
+  // Underscores and asterisks are TeX syntax, not emphasis, and `<` must survive as an entity.
+  assert.equal(
+    renderInline("mass $a_1 * b_2 < c$ here"),
+    'mass <span class="math math-inline" data-tex="a_1 * b_2 &lt; c">a_1 * b_2 &lt; c</span> here'
+  );
+  assert.equal(
+    renderInline("also \\(x^2\\) inline"),
+    'also <span class="math math-inline" data-tex="x^2">x^2</span> inline'
+  );
+  // The TeX is carried twice on purpose: `data-tex` for MathJax, text for the moment before it runs.
+  assert.match(renderInline("$\\alpha$"), /data-tex="\\alpha">\\alpha<\/span>/);
+});
+
+test("reads $ as money unless it delimits a formula", () => {
+  assert.equal(structure("It cost $5 and $10 more."), "<p>It cost $5 and $10 more.</p>");
+  assert.equal(structure("A range of $5-$10."), "<p>A range of $5-$10.</p>");
+  // An explicit escape is the way to write a lone dollar next to something math-shaped.
+  assert.equal(structure("\\$5 for $x$"), '<p>$5 for <span class="math math-inline" data-tex="x">x</span></p>');
+  assert.doesNotMatch(renderInline("`$5` in code"), /class="math/);
+});
+
+test("renders display math as its own block", () => {
+  assert.equal(
+    structure("$$\n\\frac{a}{b}\n$$"),
+    '<div class="math math-display" data-tex="\\frac{a}{b}">\\frac{a}{b}</div>'
+  );
+  assert.equal(
+    structure("\\[\ny = mx + b\n\\]"),
+    '<div class="math math-display" data-tex="y = mx + b">y = mx + b</div>'
+  );
+  assert.equal(structure("$$x^2$$"), '<div class="math math-display" data-tex="x^2">x^2</div>');
+  // A display block ends the paragraph above it and does not swallow the text below.
+  assert.equal(
+    structure("before\n$$z$$\nafter"),
+    '<p>before</p>\n<div class="math math-display" data-tex="z">z</div>\n<p>after</p>'
+  );
+});
+
+test("protects a math block from the other block rules", () => {
+  // `\\` opens an alignment row in TeX and a horizontal rule in Markdown; `&` and `|` are column
+  // separators. Inside a math block none of the block patterns may fire.
+  const html = structure("$$\n\\begin{aligned}\na &= 1 \\\\\nb &= 2\n\\end{aligned}\n$$");
+  assert.match(html, /^<div class="math math-display"/);
+  assert.doesNotMatch(html, /<hr>|<table>|<p>/);
+  assert.match(html, /data-tex="\\begin\{aligned\}\na &amp;= 1 \\\\\nb &amp;= 2\n\\end\{aligned\}"/);
+});
+
+test("leaves math alone inside code, and code alone inside math", () => {
+  assert.doesNotMatch(structure("```\n$$ x $$\n```"), /class="math/);
+  assert.equal(structure("unclosed $$ math"), "<p>unclosed $$ math</p>");
+});
+
 test("renders a large real-world document without dropping blocks", () => {
   const source = fs.readFileSync(path.join(__dirname, "fixtures/large-document.md"), "utf8");
   assert.ok(source.length > 40000, "fixture should be large enough to be interesting");
