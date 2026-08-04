@@ -1,0 +1,18 @@
+/* Explicit user choice shared by the opened-file view and Finder Quick Look. These selectors beat
+   native-preview.css's system-appearance media query without changing its Auto behavior. */
+html[data-theme="dark"] body { background: #191c23; color: #dce1ea; }
+html[data-theme="dark"] h1 { border-bottom-color: #373c47; }
+html[data-theme="dark"] h2 { border-bottom-color: #373c47; }
+html[data-theme="dark"] a { color: #8aa8ff; }
+html[data-theme="dark"] code { background: #292e39; }
+html[data-theme="dark"] th { background: #292e39; }
+html[data-theme="dark"] blockquote { background: #202536; color: #bcc5d6; }
+html[data-theme="dark"] th, html[data-theme="dark"] td { border-color: #3d4350; }
+html[data-theme="light"] body { background: #fff; color: #20242c; }
+html[data-theme="light"] h1 { border-bottom-color: #dfe2e7; }
+html[data-theme="light"] h2 { border-bottom-color: #e7e9ed; }
+html[data-theme="light"] a { color: #3568d4; }
+html[data-theme="light"] code { background: #eef1f5; }
+html[data-theme="light"] th { background: #f3f5f8; }
+html[data-theme="light"] blockquote { background: #f7f8ff; color: #5e6673; }
+html[data-theme="light"] th, html[data-theme="light"] td { border-color: #d9dde5; }

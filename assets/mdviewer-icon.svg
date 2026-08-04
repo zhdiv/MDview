@@ -1,0 +1,41 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" role="img" aria-labelledby="title description">
+  <title id="title">MDViewer application icon</title>
+  <desc id="description">A Markdown document with a down arrow and editing pencil on an indigo tile.</desc>
+  <defs>
+    <linearGradient id="tile" x1="144" y1="96" x2="872" y2="944" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#667bf0"/>
+      <stop offset="1" stop-color="#4357d0"/>
+    </linearGradient>
+    <linearGradient id="fold" x1="644" y1="150" x2="780" y2="302" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#f5f6ff"/>
+      <stop offset="1" stop-color="#d9defe"/>
+    </linearGradient>
+    <linearGradient id="pencil" x1="0" y1="0" x2="0" y2="1">
+      <stop stop-color="#c5cbff"/>
+      <stop offset="1" stop-color="#9da9fa"/>
+    </linearGradient>
+    <filter id="tile-shadow" x="-20%" y="-20%" width="140%" height="150%">
+      <feDropShadow dx="0" dy="20" stdDeviation="24" flood-color="#27378e" flood-opacity=".28"/>
+    </filter>
+    <filter id="paper-shadow" x="-20%" y="-20%" width="140%" height="150%">
+      <feDropShadow dx="0" dy="18" stdDeviation="20" flood-color="#1f2c76" flood-opacity=".32"/>
+    </filter>
+  </defs>
+
+  <rect x="16" y="16" width="992" height="992" rx="224" fill="url(#tile)" filter="url(#tile-shadow)"/>
+
+  <g filter="url(#paper-shadow)">
+    <path d="M282 146h362l152 152v500c0 45-37 82-82 82H282c-45 0-82-37-82-82V228c0-45 37-82 82-82Z" fill="#fff"/>
+    <path d="M644 146v92c0 33 27 60 60 60h92L644 146Z" fill="url(#fold)"/>
+  </g>
+
+  <path d="M348 554V378l162 162 162-162v176" fill="none" stroke="#536be3" stroke-width="62" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="m401 628 109 109 109-109" fill="none" stroke="#536be3" stroke-width="62" stroke-linecap="round" stroke-linejoin="round"/>
+
+  <g transform="rotate(15 704 657)">
+    <rect x="680" y="524" width="48" height="213" rx="12" fill="url(#pencil)"/>
+    <path d="M680 748h48l-24 53-24-53Z" fill="#536be3"/>
+    <path d="M680 718h48v19h-48z" fill="#fff"/>
+    <path d="M680 524c0-13 11-24 24-24s24 11 24 24v15h-48v-15Z" fill="#b8c0ff"/>
+  </g>
+</svg>

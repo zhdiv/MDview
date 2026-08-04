@@ -1,0 +1,48 @@
+name: Build macOS app
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: macos-build-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build universal app
+    runs-on: macos-15
+    timeout-minutes: 20
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Test Markdown renderer
+        run: node --test tests/markdown.test.js
+
+      - name: Test native macOS app
+        run: ./macOS/test.sh
+
+      - name: Build universal macOS app
+        run: ./macOS/build.sh
+
+      # Uploading an .app directory directly loses Unix permissions. ditto preserves the bundle's
+      # executable bits and macOS metadata in a single downloadable archive.
+      - name: Package app
+        run: >-
+          ditto -c -k --sequesterRsrc --keepParent
+          "macOS/build/Markdown Viewer.app"
+          "Markdown-Viewer-macOS-universal.zip"
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: Markdown-Viewer-macOS-${{ github.sha }}
+          path: Markdown-Viewer-macOS-universal.zip
+          if-no-files-found: error
+          retention-days: 14

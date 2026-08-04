@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta
+    http-equiv="Content-Security-Policy"
+    content="default-src 'self' data: blob:; connect-src 'none'; img-src 'self' data: blob:; object-src 'none'; base-uri 'none'; form-action 'none'"
+  >
+  <meta name="color-scheme" content="light dark">
+  <title>Offline Markdown Viewer</title>
+  <link rel="icon" href="assets/mdviewer-icon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="app-shell" id="app">
+    <header class="topbar">
+      <div class="brand" aria-label="Offline Markdown Viewer">
+        <img class="brand-mark" src="assets/mdviewer-icon.svg" alt="">
+        <span>
+          <strong>Markdown</strong>
+          <small>offline viewer &amp; editor</small>
+        </span>
+      </div>
+
+      <div class="document-name">
+        <span class="dirty-dot" id="dirtyDot" aria-hidden="true"></span>
+        <input id="fileName" value="untitled.md" aria-label="Document file name" spellcheck="false">
+      </div>
+
+      <nav class="file-actions" aria-label="File actions">
+        <button type="button" id="newButton" title="New document">New</button>
+        <button type="button" id="openButton" title="Open Markdown file (Ctrl/Cmd+O)">Open</button>
+        <button type="button" class="primary" id="saveButton" title="Save Markdown (Ctrl/Cmd+S)">Save</button>
+        <button type="button" id="exportButton" title="Export a standalone HTML file">Export HTML</button>
+        <button type="button" id="printButton" title="Print or save preview as PDF">Print</button>
+      </nav>
+    </header>
+
+    <section class="controlbar" aria-label="Editor controls">
+      <div class="format-actions" role="toolbar" aria-label="Markdown formatting">
+        <button type="button" data-format="heading" title="Heading">H</button>
+        <button type="button" data-format="bold" title="Bold (Ctrl/Cmd+B)"><strong>B</strong></button>
+        <button type="button" data-format="italic" title="Italic (Ctrl/Cmd+I)"><em>I</em></button>
+        <button type="button" data-format="strike" title="Strikethrough"><s>S</s></button>
+        <button type="button" data-format="code" title="Inline code">&lt;/&gt;</button>
+        <button type="button" data-format="link" title="Link (Ctrl/Cmd+K)">Link</button>
+        <button type="button" data-format="quote" title="Blockquote">❯</button>
+        <button type="button" data-format="unordered-list" title="Bulleted list">• List</button>
+        <button type="button" data-format="task-list" title="Task list">☑ List</button>
+        <button type="button" data-format="code-block" title="Code block">{ }</button>
+      </div>
+
+      <div class="view-actions">
+        <div class="segmented" aria-label="View layout">
+          <button type="button" data-view="edit">Edit</button>
+          <button type="button" class="active" data-view="split">Split</button>
+          <button type="button" data-view="preview">Preview</button>
+        </div>
+        <button type="button" id="syncButton" class="toggle active" aria-pressed="true" title="Synchronize editor and preview scrolling">Sync scroll</button>
+        <button type="button" id="searchButton" title="Find in Markdown (Ctrl/Cmd+F)">Find</button>
+        <button type="button" id="themeButton" title="Toggle light/dark theme" aria-label="Toggle theme">◐</button>
+      </div>
+    </section>
+
+    <section class="searchbar" id="searchBar" hidden>
+      <label for="searchInput">Find</label>
+      <input id="searchInput" type="search" autocomplete="off" spellcheck="false">
+      <span id="searchStatus" aria-live="polite"></span>
+      <button type="button" id="searchPrevious" title="Previous match">↑</button>
+      <button type="button" id="searchNext" title="Next match">↓</button>
+      <button type="button" id="searchClose" title="Close search">×</button>
+    </section>
+
+    <main class="workspace split" id="workspace">
+      <section class="pane editor-pane" aria-label="Markdown editor">
+        <div class="pane-heading">
+          <span>MARKDOWN</span>
+          <span id="cursorPosition">Ln 1, Col 1</span>
+        </div>
+        <textarea id="editor" aria-label="Markdown source" autocomplete="off" autocapitalize="off" spellcheck="true"></textarea>
+      </section>
+
+      <div class="divider" aria-hidden="true"></div>
+
+      <section class="pane preview-pane" aria-label="Markdown preview">
+        <div class="pane-heading">
+          <span>PREVIEW</span>
+          <button type="button" id="copyButton" title="Copy rendered HTML">Copy HTML</button>
+        </div>
+        <article class="markdown-body" id="preview"></article>
+      </section>
+    </main>
+
+    <footer class="statusbar">
+      <span id="documentStats">0 words · 0 characters</span>
+      <span class="offline-status"><i aria-hidden="true"></i> Offline · stored only in this browser</span>
+      <span id="saveStatus" aria-live="polite">Ready</span>
+    </footer>
+
+    <div class="drop-overlay" id="dropOverlay" hidden>
+      <div><strong>Drop a Markdown file</strong><span>.md, .markdown, or plain text</span></div>
+    </div>
+  </div>
+
+  <input id="fileInput" type="file" accept=".md,.markdown,text/markdown,text/plain" hidden>
+  <script src="markdown.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

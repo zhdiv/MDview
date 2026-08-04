@@ -1,0 +1,47 @@
+:root { color-scheme: light dark; }
+html, body { min-height: 100%; margin: 0; }
+body { background: #fff; color: #20242c; font: 16px/1.65 -apple-system, BlinkMacSystemFont, sans-serif; }
+.markdown-body { box-sizing: border-box; max-width: 920px; min-height: 100vh; margin: 0 auto; padding: 42px 52px 72px; }
+h1, h2, h3, h4 { line-height: 1.25; margin: 1.5em 0 .55em; }
+h1 { border-bottom: 1px solid #dfe2e7; padding-bottom: .3em; font-size: 2.2em; }
+h2 { border-bottom: 1px solid #e7e9ed; padding-bottom: .25em; font-size: 1.65em; }
+p, ul, ol, blockquote, pre { margin: 0 0 1.3em; }
+li { margin: .3em 0; }
+li > ul, li > ol { margin: .3em 0; }
+a { color: #3568d4; }
+code { border-radius: 4px; background: #eef1f5; padding: .15em .35em; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+pre { overflow: auto; border-radius: 8px; background: #171a21; color: #e9edf4; padding: 18px; white-space: pre; tab-size: 2; overflow-wrap: normal; word-break: normal; }
+/* Explicit theme selectors style inline `code` after this stylesheet is loaded. Keep that rule
+   from painting a light inline-code chip behind pale fenced-code text. */
+pre code { background: transparent !important; color: inherit !important; padding: 0; line-height: 1.5; overflow-wrap: normal; word-break: normal; }
+blockquote { margin: 0 0 1.3em; border-left: 4px solid #6b83f2; background: #f7f8ff; color: #5e6673; padding: .1em 1em; }
+table { width: 100%; margin: 0; border-collapse: collapse; }
+th, td { border: 1px solid #d9dde5; padding: 8px 12px; }
+th { background: #f3f5f8; }
+.table-wrap { overflow: auto; margin-bottom: 1.3em; }
+.task-list { padding-left: 0; list-style: none; }
+/* A nested task list still has to sit under its parent item. */
+li > .task-list { padding-left: 22px; }
+img { max-width: 100%; }
+.blocked-media { color: #8b5a00; font-style: italic; }
+/* "You are here": the block the editor caret sits in. Drawn in the gutter so nothing reflows. */
+.source-active { position: relative; }
+.source-active::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: -22px;
+  width: 3px;
+  border-radius: 2px;
+  background: #6b83f2;
+  opacity: .75;
+}
+@media (prefers-color-scheme: dark) {
+  body { background: #191c23; color: #dce1ea; }
+  h1, h2 { border-color: #373c47; }
+  a { color: #8aa8ff; }
+  code, th { background: #292e39; }
+  blockquote { background: #202536; color: #bcc5d6; }
+  th, td { border-color: #3d4350; }
+}
