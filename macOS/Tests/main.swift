@@ -13,6 +13,10 @@ let fixtureURL = URL(fileURLWithPath: CommandLine.arguments[1])
 let controller = DocumentViewController()
 controller.view.frame = NSRect(x: 0, y: 0, width: 980, height: 720)
 controller.open(url: fixtureURL)
+// UserDefaults is empty on a fresh CI runner, so the controller starts in minimal Preview mode.
+// That mode deliberately removes the editor pane from the split view. Establish Split before
+// inspecting both panes so this smoke test does not depend on preferences left on the host.
+controller.setMode(.split)
 controller.view.layoutSubtreeIfNeeded()
 
 let views = descendants(of: controller.view)
