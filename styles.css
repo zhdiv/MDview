@@ -547,6 +547,17 @@ button.toggle.active {
   accent-color: var(--accent);
 }
 
+/* MathJax draws its glyphs with `currentColor`, so typeset math follows the theme with no rule of
+   its own. Where a display formula sits is the one thing it does not decide. */
+.markdown-body .math-display {
+  display: block;
+  margin: 1.4em 0;
+  text-align: center;
+  /* A long derivation scrolls inside its own block rather than stretching the page. */
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+
 .statusbar {
   min-height: 28px;
   justify-content: space-between;
@@ -746,5 +757,10 @@ button.toggle.active {
     overflow: visible;
     padding: 0;
     color: #111;
+  }
+
+  /* On paper there is nothing to scroll: a clipped formula would simply be lost. */
+  .markdown-body .math-display {
+    overflow-x: visible;
   }
 }

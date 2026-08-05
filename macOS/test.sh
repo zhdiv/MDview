@@ -17,9 +17,11 @@ swiftc -target "$(uname -m)-apple-macos13.0" -sdk "$SDK" \
 
 mkdir -p "$TEST_OUTPUT/Web"
 cp "$SCRIPT_DIR/../markdown.js" \
+  "$SCRIPT_DIR/../math.js" \
   "$SCRIPT_DIR/Resources/Web/native-preview.css" \
   "$SCRIPT_DIR/Resources/Web/native-theme-overrides.css" \
   "$SCRIPT_DIR/Resources/Web/native-preview.js" \
   "$SCRIPT_DIR/Resources/Web/preview.html" \
   "$TEST_OUTPUT/Web/"
+cp -R "$SCRIPT_DIR/../vendor/mathjax" "$TEST_OUTPUT/Web/mathjax"
 "$TEST_OUTPUT/native-editor-smoke" "$SCRIPT_DIR/../README.md"

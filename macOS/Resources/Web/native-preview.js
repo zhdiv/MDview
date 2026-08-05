@@ -1,6 +1,10 @@
 "use strict";
+// Returns a promise the host awaits before it scrolls: math changes block heights, so a scroll
+// issued before typesetting finishes would land in the wrong place.
 window.renderMarkdown = function (markdown) {
-  document.getElementById("preview").innerHTML = MDViewerMarkdown.renderMarkdown(markdown);
+  var preview = document.getElementById("preview");
+  preview.innerHTML = MDViewerMarkdown.renderMarkdown(markdown);
+  return MDViewerMath.typesetDocument(preview, "mathjax/startup.js");
 };
 
 // Editor -> preview position sync. Every block carries the source line it was rendered from, so the

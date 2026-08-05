@@ -39,13 +39,17 @@ lipo -create "$INTERMEDIATES/MDViewerQuickLook-arm64" "$INTERMEDIATES/MDViewerQu
 
 cp "$SCRIPT_DIR/Resources/App-Info.plist" "$APP_CONTENTS/Info.plist"
 cp "$SCRIPT_DIR/Resources/QuickLook-Info.plist" "$EXTENSION_CONTENTS/Info.plist"
-cp "$PROJECT_DIR/markdown.js" "$SCRIPT_DIR/Resources/Web/preview.html" \
+cp "$PROJECT_DIR/markdown.js" "$PROJECT_DIR/math.js" "$SCRIPT_DIR/Resources/Web/preview.html" \
   "$SCRIPT_DIR/Resources/Web/native-preview.js" "$SCRIPT_DIR/Resources/Web/native-preview.css" \
   "$SCRIPT_DIR/Resources/Web/native-theme-overrides.css" \
   "$APP_CONTENTS/Resources/Web/"
-cp "$PROJECT_DIR/markdown.js" "$SCRIPT_DIR/Resources/Web/native-preview.css" \
+cp "$PROJECT_DIR/markdown.js" "$PROJECT_DIR/math.js" "$SCRIPT_DIR/Resources/Web/native-preview.css" \
   "$SCRIPT_DIR/Resources/Web/native-theme-overrides.css" \
   "$EXTENSION_CONTENTS/Resources/Web/"
+# Both targets typeset math: the app in its WKWebView, the extension in JavaScriptCore, from the
+# same vendored components. Neither may reach the network for them.
+cp -R "$PROJECT_DIR/vendor/mathjax" "$APP_CONTENTS/Resources/Web/mathjax"
+cp -R "$PROJECT_DIR/vendor/mathjax" "$EXTENSION_CONTENTS/Resources/Web/mathjax"
 
 # Keep the tiny SVG as the source of truth. macOS app bundles still require raster icon renditions.
 # AppKit preserves the SVG's alpha channel; Quick Look's thumbnail renderer must not be used here

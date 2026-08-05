@@ -305,3 +305,75 @@ guard (quickLookPage?["text"] as? String)?.contains("Offline guarantee") == true
     fatalError("Quick Look does not match the opened-file preview: \(String(describing: quickLookPage))")
 }
 print("Quick Look data-preview smoke test passed: shared renderer, layout, and Dark theme")
+
+// --- LaTeX. The live preview types math in its web view; Quick Look cannot, because Finder shows
+// the reply as static data with scripts disabled, so the extension pre-renders through
+// JavaScriptCore. Both paths must end up with real SVG and no leftover TeX.
+let mathDocument = """
+Inline $e^{i\\pi} + 1 = 0$ stays in the sentence.
+
+$$
+\\frac{\\partial u}{\\partial t} = h^2 \\nabla^2 u
+$$
+
+Prices like $5 and $10 are not math.
+"""
+
+var mathRenderError: Error?
+var mathRenderFinished = false
+standalonePreview.render(markdown: mathDocument, sourceURL: nil) { error in
+    mathRenderError = error
+    mathRenderFinished = true
+}
+let mathDeadline = Date().addingTimeInterval(30)
+while !mathRenderFinished, Date() < mathDeadline {
+    RunLoop.current.run(mode: .default, before: Date().addingTimeInterval(0.05))
+}
+guard mathRenderFinished, mathRenderError == nil else {
+    fatalError("Live preview did not render math: \(String(describing: mathRenderError))")
+}
+
+var mathPage: [String: Any]?
+previewWebView.evaluateJavaScript("""
+(() => ({
+  inline: document.querySelectorAll('span.math-inline.math-typeset svg').length,
+  display: document.querySelectorAll('div.math-display.math-typeset svg').length,
+  untypeset: document.querySelectorAll('.math:not(.math-typeset)').length,
+  keepsPrices: document.body.innerText.includes('$5 and $10')
+}))()
+""") { value, _ in
+    mathPage = value as? [String: Any]
+}
+let mathQueryDeadline = Date().addingTimeInterval(10)
+while mathPage == nil, Date() < mathQueryDeadline {
+    RunLoop.current.run(mode: .default, before: Date().addingTimeInterval(0.05))
+}
+// The render completion only fires after typesetting, so nothing here has to wait for MathJax.
+guard mathPage?["inline"] as? Int == 1, mathPage?["display"] as? Int == 1,
+      mathPage?["untypeset"] as? Int == 0, mathPage?["keepsPrices"] as? Bool == true else {
+    fatalError("Live preview did not typeset math: \(String(describing: mathPage))")
+}
+print("Live preview math smoke test passed: inline and display formulas typeset in the web view")
+
+let mathFixture = URL(fileURLWithPath: NSTemporaryDirectory())
+    .appendingPathComponent("mdviewer-math-fixture.md")
+try mathDocument.write(to: mathFixture, atomically: true, encoding: .utf8)
+let mathPreviewStarted = Date()
+let mathQuickLookData = try PreviewViewController.previewData(
+    for: mathFixture, themePreference: ThemeSync.light
+)
+let mathPreviewSeconds = Date().timeIntervalSince(mathPreviewStarted)
+try? FileManager.default.removeItem(at: mathFixture)
+guard let mathQuickLookHTML = String(data: mathQuickLookData, encoding: .utf8) else {
+    fatalError("Quick Look math reply was not UTF-8")
+}
+// Two containers, the stylesheet they need, and no element still holding untypeset TeX.
+let mathContainers = mathQuickLookHTML.components(separatedBy: "<mjx-container").count - 1
+guard mathContainers == 2,
+      mathQuickLookHTML.contains("mjx-container[jax=\"SVG\"]"),
+      !mathQuickLookHTML.contains("class=\"math math-inline\""),
+      !mathQuickLookHTML.contains("class=\"math math-display\"") else {
+    fatalError("Quick Look did not pre-render math: \(mathContainers) containers")
+}
+print("Quick Look math smoke test passed: \(mathContainers) formulas pre-rendered to SVG "
+      + "in \(String(format: "%.2f", mathPreviewSeconds))s")

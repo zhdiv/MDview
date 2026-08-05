@@ -44,6 +44,24 @@
     return escapeAttribute(String(url).replace(/&amp;/g, "&"));
   }
 
+  /// A math span. The TeX is kept twice on purpose: as `data-tex` for the typesetter to read back
+  /// exactly what the author wrote, and as the element's text so the source is on screen for the
+  /// moment between rendering and typesetting rather than a gap that reflows when it fills.
+  function mathElement(tag, kind, tex) {
+    const source = String(tex).trim();
+    return `<${tag} class="math math-${kind}" data-tex="${escapeAttribute(source)}">${escapeHtml(source)}</${tag}>`;
+  }
+
+  /// `$x$` is ambiguous with prose about money, so both ends are constrained the way GitHub and
+  /// pandoc constrain them: no space just inside either delimiter, and no digit right after the
+  /// closing one. That leaves "it cost $5 and $10 more" as text while "$x_1$" is math.
+  const INLINE_MATH = [
+    [/\\\[([\s\S]+?)\\\]/g, "display"],
+    [/\$\$([\s\S]+?)\$\$/g, "display"],
+    [/\\\(([\s\S]+?)\\\)/g, "inline"],
+    [/(?<![\\$])\$(?!\s)((?:\\.|[^\\$\n])+?)(?<!\s)\$(?!\d)/g, "inline"]
+  ];
+
   function renderInline(source) {
     const codeTokens = [];
     let value = String(source).replace(/(`+)([\s\S]*?)\1/g, (_, ticks, code) => {
@@ -52,7 +70,18 @@
       return token;
     });
 
-    value = escapeHtml(value);
+    // Math is pulled out before escaping and before the emphasis rules run: `$a_1 * b_2$` is one
+    // formula, not italics and a bullet. Code spans were taken first, so `` `$5` `` stays literal.
+    const mathTokens = [];
+    INLINE_MATH.forEach(([pattern, kind]) => {
+      value = value.replace(pattern, (_, tex) => {
+        const token = `\uE002${mathTokens.length}\uE003`;
+        mathTokens.push(mathElement("span", kind, tex));
+        return token;
+      });
+    });
+
+    value = escapeHtml(value).replace(/\\\$/g, "$");
     value = value.replace(/!\[([^\]]*)\]\((\S+?)(?:\s+&quot;(.+?)&quot;)?\)/g, (_, alt, url, title) => {
       if (!isSafeImageUrl(url)) {
         return `<span class="blocked-media" title="Remote images are blocked in offline mode">[image: ${alt || url}]</span>`;
@@ -74,6 +103,10 @@
       .replace(/(^|[\s(])\*([^*\n]+?)\*(?=$|[\s).,!?:;])/g, "$1<em>$2</em>")
       .replace(/(^|[\s(])_([^_\n]+?)_(?=$|[\s).,!?:;])/g, "$1<em>$2</em>");
 
+    // A literal replacement string would treat `$&` and friends inside TeX as substitutions.
+    mathTokens.forEach((html, index) => {
+      value = value.replace(`\uE002${index}\uE003`, () => html);
+    });
     codeTokens.forEach((html, index) => {
       value = value.replace(`\uE000${index}\uE001`, html);
     });
@@ -103,6 +136,35 @@
 
   const HORIZONTAL_RULE = /^ {0,3}(?:-{3,}|\*{3,}|_{3,})\s*$/;
   const LIST_MARKER = /^(\s*)([-+*]|\d+[.)])(\s+)(.*)$/;
+  const MATH_BLOCK = /^ {0,3}(\$\$|\\\[)/;
+
+  /// Display math that opens a line owns every line up to its closing delimiter, the way a fenced
+  /// code block does. Without that, the paragraph path would reflow the TeX and the list, table and
+  /// rule patterns would fire on lines like `\\ -- 1 & 2`.
+  ///
+  /// Returns `null` when the delimiter never closes, or when prose follows the closer on its line —
+  /// then this was inline math inside an ordinary paragraph, and the inline pass should handle it.
+  function parseMathBlock(lines, start) {
+    const open = MATH_BLOCK.exec(lines[start]);
+    if (!open) return null;
+    const closer = open[1] === "$$" ? "$$" : "\\]";
+    const body = [];
+    let index = start;
+    let rest = lines[start].slice(lines[start].indexOf(open[1]) + open[1].length);
+
+    for (;;) {
+      const at = rest.indexOf(closer);
+      if (at !== -1) {
+        if (rest.slice(at + closer.length).trim() !== "") return null;
+        body.push(rest.slice(0, at));
+        return { tex: body.join("\n").trim(), next: index + 1 };
+      }
+      body.push(rest);
+      index += 1;
+      if (index >= lines.length) return null;
+      rest = lines[index];
+    }
+  }
 
   function indentWidth(value) {
     return value.replace(/\t/g, "    ").length;
@@ -154,6 +216,7 @@
       || /^ {0,3}(```+|~~~+)/.test(line)
       || /^ {0,3}>\s?/.test(line)
       || /^ {0,3}(?:[-+*]|\d+[.)])\s+/.test(line)
+      || MATH_BLOCK.test(line)
       || HORIZONTAL_RULE.test(line)
       || (line.includes("|") && isTableDivider(next));
   }
@@ -271,6 +334,13 @@
         continue;
       }
 
+      const mathBlock = parseMathBlock(lines, index);
+      if (mathBlock) {
+        output.push(withSourceLine(mathElement("div", "display", mathBlock.tex), blockLine));
+        index = mathBlock.next;
+        continue;
+      }
+
       const heading = line.match(/^ {0,3}(#{1,6})\s+(.+?)\s*#*\s*$/);
       if (heading) {
         const level = heading[1].length;
@@ -345,4 +415,4 @@
     renderMarkdown,
     slugify
   });
-})(typeof globalThis !== "undefined" ? globalThis : window);
+})(globalThis);
