@@ -51,7 +51,9 @@ console.log("No CDN required.", offline);
     searchBar: document.getElementById("searchBar"),
     searchInput: document.getElementById("searchInput"),
     searchStatus: document.getElementById("searchStatus"),
-    dropOverlay: document.getElementById("dropOverlay")
+    dropOverlay: document.getElementById("dropOverlay"),
+    editorGuide: document.getElementById("editorGuide"),
+    previewGuide: document.getElementById("previewGuide")
   };
 
   let fileHandle = null;
@@ -114,6 +116,7 @@ console.log("No CDN required.", offline);
 
   function updatePreview() {
     elements.preview.innerHTML = MDViewerMarkdown.renderMarkdown(elements.editor.value);
+    previewAnchors = null;
     const words = (elements.editor.value.trim().match(/\S+/g) || []).length;
     const characters = elements.editor.value.length;
     elements.documentStats.textContent = `${words.toLocaleString()} ${words === 1 ? "word" : "words"} · ${characters.toLocaleString()} ${characters === 1 ? "character" : "characters"}`;
@@ -123,7 +126,10 @@ console.log("No CDN required.", offline);
     if (!elements.searchBar.hidden) updateSearchMatches(false);
     // Typesetting is asynchronous only the first time, when MathJax itself is fetched from the
     // bundled copy. Rethrowing keeps a broken install loud instead of leaving bare TeX on screen.
-    MDViewerMath.typesetDocument(elements.preview, MATHJAX_STARTUP).catch((error) => {
+    MDViewerMath.typesetDocument(elements.preview, MATHJAX_STARTUP).then(() => {
+      // Typesetting swaps TeX text for SVG, which moves everything below it.
+      previewAnchors = null;
+    }).catch((error) => {
       setStatus("Math typesetting failed");
       throw error;
     });
@@ -265,7 +271,7 @@ console.log("No CDN required.", offline);
   }
 
   function exportStyles() {
-    return `:root{color-scheme:light dark}body{margin:0;background:#f6f7f9;color:#20242c;font:16px/1.65 system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}.markdown-body{box-sizing:border-box;max-width:900px;margin:0 auto;min-height:100vh;padding:48px 56px;background:#fff}h1,h2,h3,h4{line-height:1.25;margin:1.6em 0 .6em}h1{font-size:2.2em;border-bottom:1px solid #dfe2e7;padding-bottom:.3em}h2{font-size:1.65em;border-bottom:1px solid #e7e9ed;padding-bottom:.25em}p,ul,ol{margin:0 0 1.3em}li{margin:.3em 0}a{color:#3568d4}code{background:#eef1f5;border-radius:4px;padding:.15em .35em;font-family:ui-monospace,SFMono-Regular,Consolas,monospace}pre{overflow:auto;background:#171a21;color:#e9edf4;border-radius:8px;padding:18px;white-space:pre;tab-size:2;overflow-wrap:normal;word-break:normal}pre code{background:none;padding:0;line-height:1.5;overflow-wrap:normal;word-break:normal}blockquote{margin:0 0 1.3em;padding:.1em 1em;border-left:4px solid #6b83f2;color:#5e6673;background:#f7f8ff}table{border-collapse:collapse;width:100%;margin:0}th,td{border:1px solid #d9dde5;padding:8px 12px}th{background:#f3f5f8}.table-wrap{overflow:auto;margin-bottom:1.3em}.task-list{list-style:none;padding-left:0}img{max-width:100%}.blocked-media{color:#8b5a00;font-style:italic}.math-display{display:block;margin:1.4em 0;overflow-x:auto;overflow-y:hidden;text-align:center}@media(prefers-color-scheme:dark){body{background:#111319;color:#dce1ea}.markdown-body{background:#191c23}h1,h2{border-color:#373c47}a{color:#8aa8ff}code,th{background:#292e39}blockquote{background:#202536;color:#bcc5d6}th,td{border-color:#3d4350}}@media print{body,.markdown-body{background:#fff;color:#111}.markdown-body{padding:0;max-width:none}a{color:inherit}.math-display{overflow-x:visible}}`;
+    return `:root{color-scheme:light dark}body{margin:0;background:#f6f7f9;color:#20242c;font:16px/1.65 system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}.markdown-body{box-sizing:border-box;max-width:900px;margin:0 auto;min-height:100vh;padding:48px 56px;background:#fff}h1,h2,h3,h4{line-height:1.25;margin:1.6em 0 .6em}h1{font-size:2.2em;border-bottom:1px solid #dfe2e7;padding-bottom:.3em}h2{font-size:1.65em;border-bottom:1px solid #e7e9ed;padding-bottom:.25em}p,ul,ol{margin:0 0 1.3em}li{margin:.3em 0}a{color:#3568d4}code{background:#eef1f5;border-radius:4px;padding:.15em .35em;font-family:ui-monospace,SFMono-Regular,Consolas,monospace}pre{overflow:auto;background:#f3f5f9;color:#262a31;border-radius:8px;padding:18px;white-space:pre;tab-size:2;overflow-wrap:normal;word-break:normal}pre code{background:none;padding:0;line-height:1.5;overflow-wrap:normal;word-break:normal}blockquote{margin:0 0 1.3em;padding:.1em 1em;border-left:4px solid #6b83f2;color:#5e6673;background:#f7f8ff}table{border-collapse:collapse;width:100%;margin:0}th,td{border:1px solid #d9dde5;padding:8px 12px}th{background:#f3f5f8}.table-wrap{overflow:auto;margin-bottom:1.3em}.task-list{list-style:none;padding-left:0}img{max-width:100%}.blocked-media{color:#8b5a00;font-style:italic}.math-display{display:block;margin:1.4em 0;overflow-x:auto;overflow-y:hidden;text-align:center}@media(prefers-color-scheme:dark){body{background:#111319;color:#dce1ea}.markdown-body{background:#191c23}h1,h2{border-color:#373c47}a{color:#8aa8ff}code,th{background:#292e39}pre{background:#0d0f14;color:#e9edf4}blockquote{background:#202536;color:#bcc5d6}th,td{border-color:#3d4350}}@media print{body,.markdown-body{background:#fff;color:#111}.markdown-body{padding:0;max-width:none}a{color:inherit}.math-display{overflow-x:visible}}`;
   }
 
   function exportHtml() {
@@ -342,15 +348,198 @@ console.log("No CDN required.", offline);
     applyTheme(current === "dark" ? "light" : "dark");
   }
 
+  /// Split-pane sync works in source-line space, not scroll percentage. The renderer stamps
+  /// `data-src-line` on every block it emits, and the editor's wrapped-line geometry is measured in
+  /// a hidden mirror, so each pane can convert between a fractional source line and a pixel offset.
+  /// Scrolling either pane pins the other to the same source line, and a click in the preview lands
+  /// the caret on the matching editor line. Both caches self-invalidate: the editor's on value or
+  /// width change, the preview's whenever the rendered document or its layout changes.
+  let editorMetrics = null;
+  let previewAnchors = null;
+
+  function editorLineTops() {
+    const editor = elements.editor;
+    if (editorMetrics && editorMetrics.value === editor.value && editorMetrics.width === editor.clientWidth) {
+      return editorMetrics.tops;
+    }
+    const style = getComputedStyle(editor);
+    const mirror = document.createElement("div");
+    mirror.style.cssText = [
+      "position:absolute", "left:-99999px", "top:0", "visibility:hidden",
+      "margin:0", "border:0", "box-sizing:border-box",
+      `width:${editor.clientWidth}px`,
+      `padding:${style.padding}`,
+      `font-family:${style.fontFamily}`,
+      `font-size:${style.fontSize}`,
+      `font-weight:${style.fontWeight}`,
+      `line-height:${style.lineHeight}`,
+      `letter-spacing:${style.letterSpacing}`,
+      `tab-size:${style.tabSize}`,
+      "white-space:pre-wrap", "overflow-wrap:break-word"
+    ].join(";");
+    const lines = editor.value.split("\n");
+    for (const line of lines) {
+      const row = document.createElement("div");
+      row.textContent = line || " ";
+      mirror.appendChild(row);
+    }
+    document.body.appendChild(mirror);
+    const tops = new Array(lines.length + 1);
+    for (let i = 0; i < mirror.children.length; i += 1) tops[i] = mirror.children[i].offsetTop;
+    const lastRow = mirror.lastElementChild;
+    tops[lines.length] = lastRow.offsetTop + lastRow.offsetHeight;
+    mirror.remove();
+    editorMetrics = { value: editor.value, width: editor.clientWidth, tops };
+    return tops;
+  }
+
+  function previewLineAnchors() {
+    if (previewAnchors) return previewAnchors;
+    const preview = elements.preview;
+    const base = preview.getBoundingClientRect().top - preview.scrollTop;
+    const anchors = [];
+    const push = (line, top) => {
+      const previous = anchors[anchors.length - 1];
+      if (!previous || (line > previous.line && top > previous.top)) anchors.push({ line, top });
+    };
+    preview.querySelectorAll("[data-src-line]").forEach((element) => {
+      push(Number(element.dataset.srcLine), element.getBoundingClientRect().top - base);
+    });
+    const last = preview.lastElementChild;
+    if (last) {
+      push(elements.editor.value.split("\n").length, last.getBoundingClientRect().bottom - base);
+    }
+    previewAnchors = anchors;
+    return anchors;
+  }
+
+  function interpolate(points, from, to, value) {
+    if (!points.length) return 0;
+    const first = points[0];
+    const last = points[points.length - 1];
+    if (value <= first[from]) return first[to];
+    if (value >= last[from]) return last[to];
+    let low = 0;
+    let high = points.length - 2;
+    while (low < high) {
+      const mid = (low + high + 1) >> 1;
+      if (points[mid][from] <= value) low = mid; else high = mid - 1;
+    }
+    const a = points[low];
+    const b = points[low + 1];
+    const span = b[from] - a[from];
+    return span > 0 ? a[to] + ((value - a[from]) / span) * (b[to] - a[to]) : a[to];
+  }
+
+  function editorLineAtY(y) {
+    const tops = editorLineTops();
+    const count = tops.length - 1;
+    if (y <= tops[0]) return 0;
+    if (y >= tops[count]) return count;
+    let low = 0;
+    let high = count - 1;
+    while (low < high) {
+      const mid = (low + high + 1) >> 1;
+      if (tops[mid] <= y) low = mid; else high = mid - 1;
+    }
+    const span = tops[low + 1] - tops[low];
+    return low + (span > 0 ? (y - tops[low]) / span : 0);
+  }
+
+  function editorYForLine(line) {
+    const tops = editorLineTops();
+    const count = tops.length - 1;
+    const clamped = Math.min(Math.max(line, 0), count);
+    const index = Math.min(Math.floor(clamped), count - 1);
+    return tops[index] + (tops[index + 1] - tops[index]) * (clamped - index);
+  }
+
+  function previewYForLine(line) {
+    return interpolate(previewLineAnchors(), "line", "top", line);
+  }
+
+  function previewLineAtY(y) {
+    return interpolate(previewLineAnchors(), "top", "line", y);
+  }
+
+  const guideTimers = new Map();
+
+  /// Draws the transient guide line across the pane that was just scrolled into position, `offset`
+  /// pixels below the top of its scroller's viewport.
+  function flashGuide(scroller, offset) {
+    const guide = scroller === elements.editor ? elements.editorGuide : elements.previewGuide;
+    const clamped = Math.min(Math.max(offset, 0), scroller.clientHeight - 2);
+    guide.style.top = `${scroller.offsetTop + clamped}px`;
+    guide.classList.add("visible");
+    clearTimeout(guideTimers.get(guide));
+    guideTimers.set(guide, setTimeout(() => guide.classList.remove("visible"), 900));
+  }
+
   function syncPaneScroll(source, target) {
     if (!syncScroll || scrollOwner === target) return;
+    // Only the split layout has two live panes; a hidden pane has no geometry to map into.
+    if (!elements.workspace.classList.contains("split")) return;
     scrollOwner = source;
-    const sourceRange = source.scrollHeight - source.clientHeight;
-    const targetRange = target.scrollHeight - target.clientHeight;
-    if (sourceRange > 0 && targetRange > 0) {
-      target.scrollTop = (source.scrollTop / sourceRange) * targetRange;
+    const editorDriven = source === elements.editor;
+    const sourceStart = editorDriven ? editorLineTops()[0] : (previewLineAnchors()[0]?.top ?? 0);
+    const targetStart = editorDriven ? (previewLineAnchors()[0]?.top ?? 0) : editorLineTops()[0];
+    let y;
+    if (source.scrollTop < sourceStart) {
+      // Inside the top padding both panes scroll proportionally, so scrollTop 0 maps to 0.
+      y = sourceStart > 0 ? (source.scrollTop / sourceStart) * targetStart : 0;
+    } else if (editorDriven) {
+      y = previewYForLine(editorLineAtY(source.scrollTop));
+    } else {
+      y = editorYForLine(previewLineAtY(source.scrollTop));
     }
+    target.scrollTop = y;
+    flashGuide(target, y - target.scrollTop);
     requestAnimationFrame(() => { scrollOwner = null; });
+  }
+
+  /// A click on preview prose moves the caret to the matching source line. The block's own anchor
+  /// gives the first line; the next anchor bounds it, minus any trailing blank separator lines, and
+  /// the click's vertical fraction within the block picks a line inside that span.
+  function placeCursorFromPreviewClick(event) {
+    if (!elements.workspace.classList.contains("split")) return;
+    const selection = window.getSelection();
+    if (selection && !selection.isCollapsed) return;
+    const editor = elements.editor;
+    const preview = elements.preview;
+    const lines = editor.value.split("\n");
+    let line;
+    const block = event.target.closest("[data-src-line]");
+    if (block) {
+      const rect = block.getBoundingClientRect();
+      const startLine = Math.min(Number(block.dataset.srcLine), lines.length - 1);
+      let endLine = lines.length;
+      for (const anchor of previewLineAnchors()) {
+        if (anchor.line > startLine) {
+          endLine = Math.min(anchor.line, lines.length);
+          break;
+        }
+      }
+      while (endLine > startLine + 1 && !lines[endLine - 1].trim()) endLine -= 1;
+      const frac = rect.height > 0 ? Math.min(Math.max((event.clientY - rect.top) / rect.height, 0), 1) : 0;
+      line = Math.min(startLine + Math.floor(frac * (endLine - startLine)), endLine - 1);
+    } else {
+      const y = event.clientY - preview.getBoundingClientRect().top + preview.scrollTop;
+      line = Math.min(Math.floor(previewLineAtY(y)), lines.length - 1);
+    }
+    let offset = 0;
+    for (let i = 0; i < line; i += 1) offset += lines[i].length + 1;
+    scrollOwner = preview;
+    editor.focus({ preventScroll: true });
+    editor.setSelectionRange(offset, offset);
+    const y = editorYForLine(line);
+    const viewportOffset = Math.min(
+      Math.max(event.clientY - editor.getBoundingClientRect().top, 0),
+      Math.max(editor.clientHeight - 30, 0)
+    );
+    editor.scrollTop = y - viewportOffset;
+    requestAnimationFrame(() => { scrollOwner = null; });
+    flashGuide(editor, y - editor.scrollTop);
+    updateCursorPosition();
   }
 
   function toggleSearch(show) {
@@ -394,7 +583,10 @@ console.log("No CDN required.", offline);
 
   function handlePreviewClick(event) {
   const link = event.target.closest("a");
-  if (!link) return;
+  if (!link) {
+    placeCursorFromPreviewClick(event);
+    return;
+  }
   const href = link.getAttribute("href") || "";
   if (!href) return;
 
@@ -453,6 +645,7 @@ function handleShortcut(event) {
   elements.editor.addEventListener("keyup", updateCursorPosition);
   elements.editor.addEventListener("scroll", () => syncPaneScroll(elements.editor, elements.preview));
   elements.preview.addEventListener("scroll", () => syncPaneScroll(elements.preview, elements.editor));
+  new ResizeObserver(() => { previewAnchors = null; }).observe(elements.preview);
   elements.preview.addEventListener("click", handlePreviewClick);
   elements.fileName.addEventListener("input", () => {
     persistDraft();

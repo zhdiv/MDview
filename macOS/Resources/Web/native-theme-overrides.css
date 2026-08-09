@@ -5,6 +5,7 @@ html[data-theme="dark"] h1 { border-bottom-color: #373c47; }
 html[data-theme="dark"] h2 { border-bottom-color: #373c47; }
 html[data-theme="dark"] a { color: #8aa8ff; }
 html[data-theme="dark"] code { background: #292e39; }
+html[data-theme="dark"] pre { background: #0d0f14; color: #e9edf4; }
 html[data-theme="dark"] th { background: #292e39; }
 html[data-theme="dark"] blockquote { background: #202536; color: #bcc5d6; }
 html[data-theme="dark"] th, html[data-theme="dark"] td { border-color: #3d4350; }
@@ -13,6 +14,7 @@ html[data-theme="light"] h1 { border-bottom-color: #dfe2e7; }
 html[data-theme="light"] h2 { border-bottom-color: #e7e9ed; }
 html[data-theme="light"] a { color: #3568d4; }
 html[data-theme="light"] code { background: #eef1f5; }
+html[data-theme="light"] pre { background: #f3f5f9; color: #262a31; }
 html[data-theme="light"] th { background: #f3f5f8; }
 html[data-theme="light"] blockquote { background: #f7f8ff; color: #5e6673; }
 html[data-theme="light"] th, html[data-theme="light"] td { border-color: #d9dde5; }
