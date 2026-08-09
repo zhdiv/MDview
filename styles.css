@@ -12,8 +12,8 @@
   --accent: #5b6fe8;
   --accent-strong: #4357d0;
   --accent-soft: #edf0ff;
-  --code-bg: #171a21;
-  --code-text: #e7ebf3;
+  --code-bg: #f3f5f9;
+  --code-text: #262a31;
   --danger: #e15b64;
   --shadow: 0 1px 2px rgb(24 28 36 / 6%), 0 8px 30px rgb(24 28 36 / 5%);
 }
@@ -306,6 +306,7 @@ button.toggle.active {
 }
 
 .pane {
+  position: relative;
   display: grid;
   grid-template-rows: 36px minmax(0, 1fr);
   min-width: 0;
@@ -313,6 +314,25 @@ button.toggle.active {
   border: 1px solid var(--border);
   background: var(--surface);
   box-shadow: var(--shadow);
+}
+
+/* The sync guide: a transient horizontal line marking the source position the other pane just
+   scrolled or clicked to. Positioned from script, faded out by the transition. */
+.scroll-guide {
+  position: absolute;
+  right: 0;
+  left: 0;
+  z-index: 2;
+  height: 0;
+  border-top: 2px solid var(--accent);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity .5s ease;
+}
+
+.scroll-guide.visible {
+  opacity: .55;
+  transition-duration: .08s;
 }
 
 .editor-pane {
@@ -735,6 +755,7 @@ button.toggle.active {
   .editor-pane,
   .divider,
   .pane-heading,
+  .scroll-guide,
   .statusbar {
     display: none !important;
   }

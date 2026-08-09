@@ -377,3 +377,79 @@ guard mathContainers == 2,
 }
 print("Quick Look math smoke test passed: \(mathContainers) formulas pre-rendered to SVG "
       + "in \(String(format: "%.2f", mathPreviewSeconds))s")
+
+// --- Split scroll sync: the editor and preview track each other by source line, and a click on
+// preview prose places the editor caret on the matching source line.
+let syncFixture = URL(fileURLWithPath: NSTemporaryDirectory())
+    .appendingPathComponent("mdviewer-scroll-sync-fixture.md")
+let syncText = (1...40).map { "## Sync \($0)\n\nParagraph for sync section \($0)." }
+    .joined(separator: "\n\n")
+try syncText.write(to: syncFixture, atomically: true, encoding: .utf8)
+
+let syncController = DocumentViewController()
+syncController.view.frame = NSRect(x: 0, y: 0, width: 980, height: 720)
+syncController.open(url: syncFixture)
+syncController.setMode(.split)
+syncController.view.layoutSubtreeIfNeeded()
+let syncViews = descendants(of: syncController.view)
+guard let syncEditor = syncViews.compactMap({ $0 as? NSTextView }).first(where: { $0.isEditable }),
+      let syncWebView = syncViews.compactMap({ $0 as? WKWebView }).first,
+      let syncScroll = syncEditor.enclosingScrollView else {
+    fatalError("Scroll-sync fixture did not build a split UI")
+}
+
+func evaluateInSyncPreview(_ script: String) -> Any? {
+    var result: Any?
+    var finished = false
+    syncWebView.evaluateJavaScript(script) { value, _ in
+        result = value
+        finished = true
+    }
+    let deadline = Date().addingTimeInterval(10)
+    while !finished, Date() < deadline {
+        RunLoop.current.run(mode: .default, before: Date().addingTimeInterval(0.05))
+    }
+    return result
+}
+
+func waitUntil(_ what: String, _ condition: () -> Bool) {
+    let deadline = Date().addingTimeInterval(20)
+    while !condition(), Date() < deadline {
+        RunLoop.current.run(mode: .default, before: Date().addingTimeInterval(0.05))
+    }
+    guard condition() else { fatalError("Timed out waiting for \(what)") }
+}
+
+waitUntil("the sync fixture to render") {
+    ((evaluateInSyncPreview("document.querySelectorAll('[data-src-line]').length") as? NSNumber)?.intValue ?? 0) >= 80
+}
+
+// Editor -> preview: scrolling the editor walks the preview to the same source line.
+syncScroll.contentView.scroll(to: NSPoint(x: 0, y: 2000))
+syncScroll.reflectScrolledClipView(syncScroll.contentView)
+waitUntil("the preview to follow the editor") {
+    ((evaluateInSyncPreview("window.scrollY") as? NSNumber)?.doubleValue ?? 0) > 200
+}
+
+// Preview -> editor: a reader scroll in the page brings the editor back with it.
+_ = evaluateInSyncPreview("window.scrollTo(0, 0); true")
+waitUntil("the editor to follow the preview back to the top") {
+    syncScroll.contentView.bounds.minY < 50
+}
+
+// Click on the "Sync 5" heading: the caret must land at the start of its source line (line 16).
+_ = evaluateInSyncPreview("""
+(() => {
+  const heading = [...document.querySelectorAll('h2')].find((h) => h.textContent === 'Sync 5');
+  const rect = heading.getBoundingClientRect();
+  heading.dispatchEvent(new MouseEvent('click', { bubbles: true, clientX: rect.left + 4, clientY: rect.top + 2 }));
+  return true;
+})()
+""")
+let syncHeadingOffset = syncText.components(separatedBy: "\n").prefix(16)
+    .reduce(0) { $0 + $1.utf16.count + 1 }
+waitUntil("the caret to land on the clicked heading") {
+    syncEditor.selectedRange() == NSRange(location: syncHeadingOffset, length: 0)
+}
+try? FileManager.default.removeItem(at: syncFixture)
+print("Split scroll sync smoke test passed: editor and preview follow each other, click places the caret")

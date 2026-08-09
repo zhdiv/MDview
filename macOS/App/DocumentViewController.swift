@@ -29,6 +29,18 @@ final class DocumentViewController: NSViewController, NSWindowDelegate, NSTextVi
     /// True while this controller is the one moving the divider, so its own collapse/expand passes
     /// are not mistaken for the user dragging.
     private var isAdjustingLayout = false
+    /// UTF-16 offsets of every source line start; the scroll↔line mapping and the caret both read
+    /// it. Invalidated on every edit.
+    private var cachedLineStarts: [Int]?
+    /// True while a preview-driven scroll is being applied to the editor, so the editor's own
+    /// bounds-change does not echo straight back to the preview.
+    private var isApplyingPreviewScroll = false
+    /// Coalesces the editor's many per-gesture bounds changes into one preview update per runloop turn.
+    private var editorSyncScheduled = false
+    /// The transient guide line flashed over the editor at the position a preview scroll or click
+    /// mapped to.
+    private let editorGuide = NSView()
+    private var guideFadeTask: DispatchWorkItem?
 
     private static let modeDefaultsKey = "viewMode"
     private static let dividerFractionKey = "splitDividerFraction"
@@ -148,6 +160,16 @@ final class DocumentViewController: NSViewController, NSWindowDelegate, NSTextVi
 
         configureSplitView()
 
+        editorGuide.wantsLayer = true
+        editorGuide.layer?.backgroundColor = NSColor(srgbRed: 107/255, green: 131/255, blue: 242/255, alpha: 1).cgColor
+        editorGuide.alphaValue = 0
+        editorPane.addSubview(editorGuide, positioned: .above, relativeTo: scrollView)
+
+        scrollView.contentView.postsBoundsChangedNotifications = true
+        NotificationCenter.default.addObserver(self, selector: #selector(editorScrolled),
+                                               name: NSView.boundsDidChangeNotification,
+                                               object: scrollView.contentView)
+
         view.addSubview(toolbar)
         view.addSubview(splitView)
         splitView.translatesAutoresizingMaskIntoConstraints = false
@@ -231,6 +253,7 @@ final class DocumentViewController: NSViewController, NSWindowDelegate, NSTextVi
             fileURL = url
             savedText = text
             editor.string = text
+            cachedLineStarts = nil
             preview.render(markdown: text, sourceURL: url)
             statusLabel.stringValue = url.path
             updateWindowTitle()
@@ -260,6 +283,7 @@ final class DocumentViewController: NSViewController, NSWindowDelegate, NSTextVi
         - Press Space on a Markdown file in Finder for Quick Look.
         """
         editor.string = welcome
+        cachedLineStarts = nil
         savedText = welcome
         preview.render(markdown: welcome, sourceURL: nil)
         updateWindowTitle()
@@ -367,6 +391,7 @@ final class DocumentViewController: NSViewController, NSWindowDelegate, NSTextVi
     // MARK: - Live preview
 
     func textDidChange(_ notification: Notification) {
+        cachedLineStarts = nil
         saveButton.isEnabled = editor.string != savedText && fileURL != nil
         scheduleLivePreview()
     }
@@ -400,22 +425,126 @@ final class DocumentViewController: NSViewController, NSWindowDelegate, NSTextVi
                        focusLine: preservingScroll ? caretSourceLine() : nil)
     }
 
-    /// 0-based source line the caret sits on. Counted over UTF-16 units, which is what
-    /// `selectedRange()` is expressed in, and without copying the document.
+    /// 0-based source line the caret sits on. `selectedRange()` is expressed in UTF-16 units, which
+    /// is exactly what `lineStarts` indexes.
     private func caretSourceLine() -> Int {
-        let location = editor.selectedRange().location
-        guard location > 0 else { return 0 }
-        let units = editor.string.utf16
-        guard let caret = units.index(units.startIndex, offsetBy: location, limitedBy: units.endIndex) else {
-            return 0
+        lineIndex(forUTF16Offset: editor.selectedRange().location)
+    }
+
+    // MARK: - Split scroll sync
+
+    /// The split editor and the preview stay on the same *source line*. The editor side maps a
+    /// content y to a fractional line through the layout manager's line fragments (so hard-wrapped
+    /// paragraphs map smoothly), the preview side interpolates between its `data-src-line` blocks.
+    /// Each direction suppresses its own echo: the page ignores scroll events right after a
+    /// programmatic scroll, and `isApplyingPreviewScroll` mutes the editor's bounds-change while a
+    /// preview-driven scroll is applied.
+    private var lineStarts: [Int] {
+        if let cachedLineStarts { return cachedLineStarts }
+        var starts = [0]
+        var offset = 0
+        for unit in editor.string.utf16 {
+            offset += 1
+            if unit == 10 { starts.append(offset) }
         }
-        var line = 0
-        var cursor = units.startIndex
-        while cursor < caret {
-            if units[cursor] == 10 { line += 1 }
-            cursor = units.index(after: cursor)
+        cachedLineStarts = starts
+        return starts
+    }
+
+    /// 0-based line owning the UTF-16 offset: the last line start at or before it.
+    private func lineIndex(forUTF16Offset offset: Int) -> Int {
+        let starts = lineStarts
+        var low = 0
+        var high = starts.count - 1
+        while low < high {
+            let mid = (low + high + 1) / 2
+            if starts[mid] <= offset { low = mid } else { high = mid - 1 }
         }
-        return line
+        return low
+    }
+
+    /// Top of the line's first fragment, in text-container coordinates.
+    private func fragmentTop(ofLine line: Int) -> CGFloat {
+        guard let layoutManager = editor.layoutManager else { return 0 }
+        let length = (editor.string as NSString).length
+        guard length > 0 else { return 0 }
+        let starts = lineStarts
+        let characterIndex = min(starts[min(line, starts.count - 1)], length - 1)
+        let glyphIndex = layoutManager.glyphIndexForCharacter(at: characterIndex)
+        return layoutManager.lineFragmentRect(forGlyphAt: glyphIndex, effectiveRange: nil).minY
+    }
+
+    private func editorContentHeight() -> CGFloat {
+        guard let layoutManager = editor.layoutManager, let container = editor.textContainer else { return 0 }
+        return layoutManager.usedRect(for: container).maxY
+    }
+
+    /// Container-space y of a fractional source line.
+    private func editorY(forLine line: Double) -> CGFloat {
+        let count = lineStarts.count
+        let clamped = min(max(line, 0), Double(count))
+        let index = min(Int(clamped), count - 1)
+        let fraction = CGFloat(clamped - Double(index))
+        let top = fragmentTop(ofLine: index)
+        let bottom = index + 1 < count ? fragmentTop(ofLine: index + 1) : editorContentHeight()
+        return top + fraction * max(bottom - top, 0)
+    }
+
+    /// Fractional source line at a container-space y.
+    private func editorLine(atY y: CGFloat) -> Double {
+        guard let layoutManager = editor.layoutManager, let container = editor.textContainer else { return 0 }
+        guard (editor.string as NSString).length > 0, y > 0 else { return 0 }
+        let glyphIndex = layoutManager.glyphIndex(for: NSPoint(x: 4, y: y), in: container)
+        let line = lineIndex(forUTF16Offset: layoutManager.characterIndexForGlyph(at: glyphIndex))
+        let top = fragmentTop(ofLine: line)
+        let bottom = line + 1 < lineStarts.count ? fragmentTop(ofLine: line + 1) : editorContentHeight()
+        let fraction = bottom > top ? min(max((y - top) / (bottom - top), 0), 1) : 0
+        return Double(line) + Double(fraction)
+    }
+
+    @objc private func editorScrolled() {
+        guard mode == .split, !isApplyingPreviewScroll, !editorSyncScheduled else { return }
+        editorSyncScheduled = true
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            self.editorSyncScheduled = false
+            guard self.mode == .split, !self.isApplyingPreviewScroll else { return }
+            let contentY = self.scrollView.contentView.bounds.minY - self.editor.textContainerInset.height
+            self.preview.scroll(toSourceLine: contentY <= 0 ? 0 : self.editorLine(atY: contentY))
+        }
+    }
+
+    /// Scrolls the editor so `line` sits `viewportOffset` points below the top of its viewport, and
+    /// flashes the guide there.
+    private func scrollEditor(toLine line: Double, viewportOffset: CGFloat) {
+        let inset = editor.textContainerInset.height
+        let y = line <= 0 && viewportOffset == 0 ? 0 : editorY(forLine: line) + inset
+        let clip = scrollView.contentView
+        let maximum = max(0, editor.frame.height - clip.bounds.height)
+        let target = min(max(y - viewportOffset, 0), maximum)
+        isApplyingPreviewScroll = true
+        clip.scroll(to: NSPoint(x: clip.bounds.minX, y: target))
+        scrollView.reflectScrolledClipView(clip)
+        isApplyingPreviewScroll = false
+        flashEditorGuide(atViewportY: y - target)
+    }
+
+    private func flashEditorGuide(atViewportY offset: CGFloat) {
+        let height = editorPane.bounds.height
+        guard height > 4 else { return }
+        let clamped = min(max(offset, 0), height - 2)
+        editorGuide.frame = NSRect(x: 0, y: height - clamped - 2, width: editorPane.bounds.width, height: 2)
+        editorGuide.layer?.removeAllAnimations()
+        editorGuide.alphaValue = 0.55
+        guideFadeTask?.cancel()
+        let fade = DispatchWorkItem { [weak self] in
+            NSAnimationContext.runAnimationGroup { context in
+                context.duration = 0.45
+                self?.editorGuide.animator().alphaValue = 0
+            }
+        }
+        guideFadeTask = fade
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.9, execute: fade)
     }
 
     // MARK: - Theme
@@ -599,6 +728,35 @@ private enum EditorPalette {
 extension DocumentViewController: MarkdownPreviewViewDelegate {
     func previewView(_ view: MarkdownPreviewView, openLinkedFile url: URL) {
         open(url: url)
+    }
+
+    func previewView(_ view: MarkdownPreviewView, didScrollToSourceLine line: Double) {
+        guard mode == .split else { return }
+        scrollEditor(toLine: line, viewportOffset: 0)
+    }
+
+    func previewView(_ view: MarkdownPreviewView, placeCaretAt target: MarkdownPreviewView.CaretTarget) {
+        guard mode == .split else { return }
+        let starts = lineStarts
+        let lineCount = starts.count
+        let text = editor.string as NSString
+        let start = min(max(target.startLine, 0), lineCount - 1)
+        var end = min(max(target.endLine, start + 1), lineCount)
+        // The next block's line bounds the clicked block's span, but blank separator lines between
+        // the two belong to neither: a click near the block's bottom edge should land on its last
+        // real line, not on the gap.
+        func isBlank(_ line: Int) -> Bool {
+            let from = starts[line]
+            let to = line + 1 < lineCount ? starts[line + 1] - 1 : text.length
+            guard to > from else { return true }
+            return text.substring(with: NSRange(location: from, length: to - from))
+                .trimmingCharacters(in: .whitespaces).isEmpty
+        }
+        while end > start + 1, isBlank(end - 1) { end -= 1 }
+        let line = min(start + Int(target.fraction * Double(end - start)), end - 1)
+        editor.setSelectedRange(NSRange(location: starts[line], length: 0))
+        self.view.window?.makeFirstResponder(editor)
+        scrollEditor(toLine: Double(line), viewportOffset: CGFloat(target.viewportY))
     }
 }
 

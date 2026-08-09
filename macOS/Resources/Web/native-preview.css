@@ -10,7 +10,7 @@ li { margin: .3em 0; }
 li > ul, li > ol { margin: .3em 0; }
 a { color: #3568d4; }
 code { border-radius: 4px; background: #eef1f5; padding: .15em .35em; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
-pre { overflow: auto; border-radius: 8px; background: #171a21; color: #e9edf4; padding: 18px; white-space: pre; tab-size: 2; overflow-wrap: normal; word-break: normal; }
+pre { overflow: auto; border-radius: 8px; background: #f3f5f9; color: #262a31; padding: 18px; white-space: pre; tab-size: 2; overflow-wrap: normal; word-break: normal; }
 /* Explicit theme selectors style inline `code` after this stylesheet is loaded. Keep that rule
    from painting a light inline-code chip behind pale fenced-code text. */
 pre code { background: transparent !important; color: inherit !important; padding: 0; line-height: 1.5; overflow-wrap: normal; word-break: normal; }
@@ -40,11 +40,27 @@ img { max-width: 100%; }
   background: #6b83f2;
   opacity: .75;
 }
+/* The sync guide: a transient horizontal line marking the source position the host editor just
+   scrolled or clicked to. Positioned from script, faded out by the transition. */
+#sync-guide {
+  position: fixed;
+  top: 0;
+  right: 0;
+  left: 0;
+  z-index: 10;
+  height: 0;
+  border-top: 2px solid #6b83f2;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity .5s ease;
+}
+#sync-guide.visible { opacity: .55; transition-duration: .08s; }
 @media (prefers-color-scheme: dark) {
   body { background: #191c23; color: #dce1ea; }
   h1, h2 { border-color: #373c47; }
   a { color: #8aa8ff; }
   code, th { background: #292e39; }
+  pre { background: #0d0f14; color: #e9edf4; }
   blockquote { background: #202536; color: #bcc5d6; }
   th, td { border-color: #3d4350; }
 }

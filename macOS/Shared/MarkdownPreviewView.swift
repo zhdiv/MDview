@@ -4,6 +4,12 @@ import WebKit
 protocol MarkdownPreviewViewDelegate: AnyObject {
     /// The user clicked a relative Markdown link. The receiver should load the file in-place.
     func previewView(_ view: MarkdownPreviewView, openLinkedFile url: URL)
+    /// The user scrolled the preview; `line` is the fractional source line at the top of its
+    /// viewport. The receiver should bring its editor to the same line.
+    func previewView(_ view: MarkdownPreviewView, didScrollToSourceLine line: Double)
+    /// The user clicked preview prose; the receiver should place the editor caret inside the
+    /// clicked block's source span.
+    func previewView(_ view: MarkdownPreviewView, placeCaretAt target: MarkdownPreviewView.CaretTarget)
 }
 
 final class MarkdownPreviewView: NSView, WKNavigationDelegate {
@@ -18,12 +24,23 @@ final class MarkdownPreviewView: NSView, WKNavigationDelegate {
     /// Source line the host wants kept in view; `nil` leaves the scroll position alone.
     private var pendingFocusLine: Int?
 
-    /// Weak proxy so the message handler does not retain the view (avoids the WKWebView retain cycle).
-    private final class LinkMessageProxy: NSObject, WKScriptMessageHandler {
+    /// One click in the preview, resolved to a span of source lines. `startLine` is the clicked
+    /// block's first line, `endLine` the first line past it, and `fraction` how far down the block
+    /// the click landed. `viewportY` is the click's offset from the top of the preview viewport, so
+    /// the editor can align the chosen line with where the user actually clicked.
+    struct CaretTarget {
+        let startLine: Int
+        let endLine: Int
+        let fraction: Double
+        let viewportY: Double
+    }
+
+    /// Weak proxy so the message handlers do not retain the view (avoids the WKWebView retain cycle).
+    private final class MessageProxy: NSObject, WKScriptMessageHandler {
         weak var view: MarkdownPreviewView?
         init(_ view: MarkdownPreviewView) { self.view = view }
         func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
-            view?.handleLinkMessage(message)
+            view?.handleScriptMessage(message)
         }
     }
 
@@ -44,8 +61,12 @@ final class MarkdownPreviewView: NSView, WKNavigationDelegate {
             webView.trailingAnchor.constraint(equalTo: trailingAnchor),
             webView.bottomAnchor.constraint(equalTo: bottomAnchor)
         ])
-        // Register the link bridge through a weak proxy so the page can hand us raw hrefs.
-        webView.configuration.userContentController.add(LinkMessageProxy(self), name: "link")
+        // Register the page bridges through a weak proxy: raw hrefs, scroll positions, and caret
+        // requests all arrive here.
+        let proxy = MessageProxy(self)
+        for name in ["link", "scrollSync", "caret"] {
+            webView.configuration.userContentController.add(proxy, name: name)
+        }
     }
 
     required init?(coder: NSCoder) { nil }
@@ -88,7 +109,7 @@ final class MarkdownPreviewView: NSView, WKNavigationDelegate {
         document.documentElement.dataset.theme = theme;
         const offset = keepScroll ? window.scrollY : 0;
         await window.renderMarkdown(markdown);
-        window.scrollTo(0, offset);
+        window.restoreScrollOffset(offset);
         if (focusLine >= 0) window.scrollToSourceLine(focusLine);
         return true;
         """
@@ -117,6 +138,14 @@ final class MarkdownPreviewView: NSView, WKNavigationDelegate {
         guard isTemplateLoaded else { return }
         webView.callAsyncJavaScript("window.scrollToSourceLine(line); return true;",
                                     arguments: ["line": sourceLine], in: nil, in: .page)
+    }
+
+    /// Scrolls the page so `line` (fractional) sits at the top of the viewport, and flashes the
+    /// page's sync guide there. Used by the split editor to mirror its own scrolling.
+    func scroll(toSourceLine line: Double) {
+        guard isTemplateLoaded else { return }
+        webView.callAsyncJavaScript("window.scrollPreviewToSourceLine(line); return true;",
+                                    arguments: ["line": line], in: nil, in: .page)
     }
 
     /// Force the preview to a theme ("light"/"dark"). Applied live and re-applied on each render in
@@ -163,13 +192,30 @@ final class MarkdownPreviewView: NSView, WKNavigationDelegate {
         }
     }
 
-    // MARK: - Link bridge
+    // MARK: - Page bridges
 
     weak var linkDelegate: MarkdownPreviewViewDelegate?
 
-    private func handleLinkMessage(_ message: WKScriptMessage) {
-        guard let body = message.body as? [String: Any], let href = body["href"] as? String, !href.isEmpty else { return }
-        handleLink(href: href)
+    private func handleScriptMessage(_ message: WKScriptMessage) {
+        guard let body = message.body as? [String: Any] else { return }
+        switch message.name {
+        case "link":
+            guard let href = body["href"] as? String, !href.isEmpty else { return }
+            handleLink(href: href)
+        case "scrollSync":
+            guard let line = (body["line"] as? NSNumber)?.doubleValue else { return }
+            linkDelegate?.previewView(self, didScrollToSourceLine: line)
+        case "caret":
+            guard let start = (body["start"] as? NSNumber)?.intValue,
+                  let end = (body["end"] as? NSNumber)?.intValue,
+                  let fraction = (body["fraction"] as? NSNumber)?.doubleValue,
+                  let viewportY = (body["viewportY"] as? NSNumber)?.doubleValue else { return }
+            linkDelegate?.previewView(self, placeCaretAt: CaretTarget(
+                startLine: start, endLine: end, fraction: fraction, viewportY: viewportY
+            ))
+        default:
+            return
+        }
     }
 
     private func handleLink(href: String) {
